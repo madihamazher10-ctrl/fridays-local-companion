@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Orb } from "./Orb";
 import { recordAudio, averageVectors } from "@/lib/friday/voiceprint";
 import { sha256, type UserProfile } from "@/lib/friday/store";
