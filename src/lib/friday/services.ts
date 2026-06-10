@@ -291,12 +291,13 @@ export async function tavilySearch(apiKey: string, query: string): Promise<strin
 /* ---------------- Status ---------------- */
 
 export async function checkAllServices(endpoints: Endpoints) {
-  const [ollama, chroma, whisper, piper, pc] = await Promise.all([
+  const [ollama, chroma, whisper, piper, pc, backend] = await Promise.all([
     checkService(endpoints.ollama, "/api/tags"),
     checkService(endpoints.chroma, "/api/v1/heartbeat"),
     checkService(endpoints.whisper, "/"),
     checkService(endpoints.piper, "/"),
     checkService(endpoints.pcControl, "/"),
+    checkService(endpoints.backend, "/"),
   ]);
-  return { ollama, chroma, whisper, piper, pcControl: pc };
+  return { ollama, chroma, whisper, piper, pcControl: pc, backend };
 }
