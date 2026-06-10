@@ -511,7 +511,8 @@ function ChatInput({
   muted,
   onToggleMute,
   onMic,
-  listening,
+  recording,
+  transcribing,
 }: {
   value: string;
   onChange: (v: string) => void;
@@ -519,7 +520,8 @@ function ChatInput({
   muted: boolean;
   onToggleMute: () => void;
   onMic: () => void;
-  listening: boolean;
+  recording: boolean;
+  transcribing: boolean;
 }) {
   return (
     <form
@@ -532,15 +534,23 @@ function ChatInput({
       <button
         type="button"
         onClick={onMic}
-        className={`w-10 h-10 rounded-lg flex items-center justify-center border transition ${
-          listening
-            ? "border-[color:var(--color-cyan-glow)] bg-[color:var(--color-cyan-glow)]/20 animate-pulse"
-            : "border-border hover:border-[color:var(--color-cyan-glow)]/60"
+        disabled={transcribing}
+        className={`w-10 h-10 rounded-lg flex items-center justify-center border transition relative ${
+          recording
+            ? "border-red-500 bg-red-500/20 text-red-100 animate-pulse shadow-[0_0_18px_#ef4444]"
+            : transcribing
+              ? "border-[color:var(--color-cyan-glow)]/60 bg-[color:var(--color-cyan-glow)]/10 animate-pulse"
+              : "border-border hover:border-[color:var(--color-cyan-glow)]/60"
         }`}
-        title="Voice input"
+        title={recording ? "Stop recording" : transcribing ? "Transcribing…" : "Start recording"}
       >
-        🎙
+        {recording ? "■" : transcribing ? "…" : "🎙"}
       </button>
+      {transcribing && (
+        <span className="text-[10px] tracking-widest uppercase text-[color:var(--color-cyan-glow)]/80 animate-pulse">
+          Transcribing…
+        </span>
+      )}
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
