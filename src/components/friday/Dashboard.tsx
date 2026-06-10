@@ -95,7 +95,7 @@ export function Dashboard({
     const part = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
     const greeting = `Good ${part}, ${user.name}. All systems online. How can I assist you today?`;
     setMessages([{ id: crypto.randomUUID(), role: "assistant", content: greeting, ts: Date.now() }]);
-    if (!muted) void piperSpeak(settings.endpoints.piper, greeting, settings.voiceName);
+    if (!muted) void speak(greeting);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -113,6 +113,41 @@ export function Dashboard({
     return out;
   }
 
+  // Play assistant audio via Piper /synthesize; keeps orb in "speaking" state until done.
+  async function speak(text: string) {
+    if (!text) return;
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause();
+      } catch {}
+      currentAudioRef.current = null;
+    }
+    try {
+      const audio = await piperSynthesize(settings.endpoints.piper, text);
+      currentAudioRef.current = audio;
+      setOrbState("speaking");
+      const done = new Promise<void>((resolve) => {
+        audio.addEventListener("ended", () => resolve(), { once: true });
+        audio.addEventListener("error", () => resolve(), { once: true });
+      });
+      await audio.play().catch(() => {});
+      await done;
+    } catch {
+      if ("speechSynthesis" in window) {
+        setOrbState("speaking");
+        await new Promise<void>((resolve) => {
+          const u = new SpeechSynthesisUtterance(text);
+          u.onend = () => resolve();
+          u.onerror = () => resolve();
+          window.speechSynthesis.speak(u);
+        });
+      }
+    } finally {
+      currentAudioRef.current = null;
+      setOrbState((s) => (s === "speaking" ? "idle" : s));
+    }
+  }
+
   async function send(rawText: string) {
     const text = rawText.trim();
     if (!text) return;
@@ -121,7 +156,6 @@ export function Dashboard({
     setMessages((m) => [...m, userMsg]);
     setOrbState("thinking");
 
-    // Retrieve memories
     const memories = await chromaQuery(settings.endpoints.chroma, text, 5);
     const webContext = await maybeWebSearch(text);
 
@@ -143,25 +177,21 @@ export function Dashboard({
       { id: assistantId, role: "assistant", content: "", ts: Date.now(), meta: { searched: !!webContext, offline: !online } },
     ]);
 
-    setOrbState("speaking");
-
     try {
-      const full = await ollamaChatStream(
-        settings.endpoints.ollama,
-        settings.model,
-        [
-          { role: "system", content: systemContent },
-          ...chatHistory,
-          { role: "user", content: text },
-        ],
-        (tok) => {
+      const full = await backendChatStream(
+        settings.endpoints.backend,
+        {
+          message: text,
+          history: [{ role: "system", content: systemContent }, ...chatHistory],
+          context: contextBits.join("\n\n") || undefined,
+        },
+        (tok: string) => {
           setMessages((m) =>
             m.map((msg) => (msg.id === assistantId ? { ...msg, content: msg.content + tok } : msg)),
           );
         },
       );
 
-      // Save memory
       const memory: Memory = {
         id: crypto.randomUUID(),
         text: `User: ${text}\nFRIDAY: ${full}`,
@@ -170,8 +200,9 @@ export function Dashboard({
       const saved = await chromaAddMemory(settings.endpoints.chroma, memory);
       if (saved) setMemorySavedTick((t) => t + 1);
 
-      if (!muted && full) void piperSpeak(settings.endpoints.piper, full, settings.voiceName);
-    } catch (err) {
+      if (!muted && full) void speak(full);
+      else setOrbState("idle");
+    } catch {
       setMessages((m) =>
         m.map((msg) =>
           msg.id === assistantId
@@ -179,72 +210,90 @@ export function Dashboard({
                 ...msg,
                 content:
                   msg.content ||
-                  `⚠ Unable to reach Ollama at ${settings.endpoints.ollama}. Make sure it's running.`,
+                  `⚠ Unable to reach FRIDAY backend at ${settings.endpoints.backend}/chat/stream. Make sure it's running.`,
               }
             : msg,
         ),
       );
-    } finally {
       setOrbState("idle");
     }
   }
 
+  // Toggle MediaRecorder on/off. On stop, transcribe via Whisper /transcribe, fill the
+  // input box with the text, and immediately send it to the FRIDAY backend.
   async function handleMic() {
-    if (orbState === "listening") return;
-    setOrbState("listening");
+    if (recording) {
+      const mr = mediaRecorderRef.current;
+      if (mr && mr.state !== "inactive") mr.stop();
+      return;
+    }
     try {
-      // Capture & verify voiceprint
-      const vec = await recordAudio(4);
-      if (user.voiceprint) {
-        const sim = cosineSimilarity(vec, user.voiceprint);
-        if (sim < VOICE_MATCH_THRESHOLD) {
-          const denied = "I don't recognize your voice. Access denied.";
-          setMessages((m) => [
-            ...m,
-            { id: crypto.randomUUID(), role: "assistant", content: denied, ts: Date.now() },
-          ]);
-          if (!muted) void piperSpeak(settings.endpoints.piper, denied, settings.voiceName);
-          setOrbState("idle");
-          return;
-        }
-      }
-      // Re-record actual content via MediaRecorder for Whisper
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const chunks: Blob[] = [];
-      const mr = new MediaRecorder(stream);
-      mr.ondataavailable = (e) => e.data.size && chunks.push(e.data);
-      const recPromise = new Promise<Blob>((res) => {
-        mr.onstop = () => res(new Blob(chunks, { type: "audio/webm" }));
-      });
-      mr.start();
-      await new Promise((r) => setTimeout(r, 4000));
-      mr.stop();
-      stream.getTracks().forEach((t) => t.stop());
-      const blob = await recPromise;
-      const text = await whisperTranscribe(settings.endpoints.whisper, blob);
-      if (text) {
-        // Voice quick-command check
-        const cmd = matchVoiceCommand(text);
-        if (cmd) {
-          await pcControl(settings.endpoints.pcControl, cmd);
-          const ack = `Done. ${prettyCmd(cmd)}.`;
+      mediaStreamRef.current = stream;
+      recordedChunksRef.current = [];
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : "";
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => {
+        if (e.data && e.data.size) recordedChunksRef.current.push(e.data);
+      };
+      mr.onstop = async () => {
+        setRecording(false);
+        setOrbState("idle");
+        mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+        mediaStreamRef.current = null;
+        const blob = new Blob(recordedChunksRef.current, { type: mr.mimeType || "audio/webm" });
+        recordedChunksRef.current = [];
+        if (!blob.size) return;
+        setTranscribing(true);
+        try {
+          const text = await whisperTranscribeAudio(settings.endpoints.whisper, blob);
+          if (!text) {
+            setInput("");
+            return;
+          }
+          setInput(text);
+          const cmd = matchVoiceCommand(text);
+          if (cmd) {
+            await pcControl(settings.endpoints.pcControl, cmd);
+            const ack = `Done. ${prettyCmd(cmd)}.`;
+            setMessages((m) => [
+              ...m,
+              { id: crypto.randomUUID(), role: "user", content: text, ts: Date.now() },
+              { id: crypto.randomUUID(), role: "assistant", content: ack, ts: Date.now() },
+            ]);
+            setInput("");
+            if (!muted) void speak(ack);
+            return;
+          }
+          await send(text);
+        } catch {
           setMessages((m) => [
             ...m,
-            { id: crypto.randomUUID(), role: "user", content: text, ts: Date.now() },
-            { id: crypto.randomUUID(), role: "assistant", content: ack, ts: Date.now() },
+            {
+              id: crypto.randomUUID(),
+              role: "assistant",
+              content: `⚠ Could not reach Whisper at ${settings.endpoints.whisper}/transcribe.`,
+              ts: Date.now(),
+            },
           ]);
-          if (!muted) void piperSpeak(settings.endpoints.piper, ack, settings.voiceName);
-          setOrbState("idle");
-          return;
+        } finally {
+          setTranscribing(false);
         }
-        void send(text);
-      } else {
-        setOrbState("idle");
-      }
-    } catch (e) {
+      };
+      mr.start();
+      setRecording(true);
+      setOrbState("listening");
+    } catch {
+      setRecording(false);
       setOrbState("idle");
     }
   }
+
 
   return (
     <div className="min-h-screen flex flex-col scanlines">
