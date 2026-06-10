@@ -9,6 +9,7 @@ export type Endpoints = {
   whisper: string;
   piper: string;
   pcControl: string;
+  backend: string;
 };
 
 export type Settings = {
