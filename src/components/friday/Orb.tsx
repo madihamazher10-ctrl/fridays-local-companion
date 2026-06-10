@@ -8,7 +8,7 @@ export function Orb({ state = "idle", size = 240 }: { state?: OrbState; size?: n
     <div
       className="relative flex items-center justify-center"
       style={{ width: size, height: size }}
-      aria-label={`FRIDAY ${state}`}
+      aria-label={`Jessica ${state}`}
     >
       {/* outer rings */}
       <div
