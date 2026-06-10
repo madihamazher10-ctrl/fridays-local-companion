@@ -325,6 +325,7 @@ export function Dashboard({
               <StatusDot ok={status.whisper} label="Whisper voice" />
               <StatusDot ok={status.piper} label="Piper TTS" />
               <StatusDot ok={status.pcControl} label="PC control" />
+              <StatusDot ok={status.backend} label="FRIDAY backend" />
             </ul>
           </Panel>
           <Link
