@@ -14,7 +14,7 @@ import { checkAllServices, ollamaListModels } from "@/lib/friday/services";
 import { recordAudio, averageVectors } from "@/lib/friday/voiceprint";
 
 export const Route = createFileRoute("/settings")({
-  head: () => ({ meta: [{ title: "FRIDAY · Settings" }] }),
+  head: () => ({ meta: [{ title: "JESSICA · Settings" }] }),
   component: () => (
     <ClientOnly fallback={<div className="p-8">Loading…</div>}>
       <SettingsPage />
@@ -95,13 +95,13 @@ function SettingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `friday-backup-${Date.now()}.json`;
+    a.download = `jessica-backup-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
   function factoryReset() {
-    if (!confirm("Wipe all local FRIDAY data? This cannot be undone.")) return;
+    if (!confirm("Wipe all local Jessica data? This cannot be undone.")) return;
     if (typeof window !== "undefined") {
       Object.keys(localStorage)
         .filter((k) => k.startsWith("friday::"))
