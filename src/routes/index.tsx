@@ -9,7 +9,7 @@ import { usePersistent, DEFAULT_SETTINGS, STORE_KEYS, type Settings, type UserPr
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "FRIDAY — Personal AI Assistant" },
+      { title: "JESSICA — Personal AI Assistant" },
       { name: "description", content: "Your private, local-first AI. Loyal to one user. Built to learn." },
     ],
   }),
@@ -28,7 +28,7 @@ function BootSplash() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="font-display tracking-[0.5em] text-[color:var(--color-cyan-glow)] glow-text animate-pulse">
-        BOOTING FRIDAY…
+        BOOTING JESSICA…
       </div>
     </div>
   );
