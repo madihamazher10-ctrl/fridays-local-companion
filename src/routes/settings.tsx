@@ -153,7 +153,7 @@ function SettingsPage() {
 
         <Panel title="LOCAL SERVICES">
           <ul className="space-y-2">
-            {(["ollama", "chroma", "whisper", "piper", "pcControl"] as const).map((k) => (
+            {(["ollama", "chroma", "whisper", "piper", "pcControl", "backend"] as const).map((k) => (
               <li key={k} className="flex items-center gap-3">
                 <span
                   className={`w-2 h-2 rounded-full ${
