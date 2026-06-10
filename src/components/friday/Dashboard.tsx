@@ -382,10 +382,12 @@ export function Dashboard({
                 setSettings((s) => ({ ...s, autoSpeak: muted }));
               }}
               onMic={handleMic}
-              listening={orbState === "listening"}
+              recording={recording}
+              transcribing={transcribing}
             />
           </Panel>
         </main>
+
 
         {/* Right sidebar */}
         <aside className="space-y-3">
