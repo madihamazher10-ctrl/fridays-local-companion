@@ -52,8 +52,14 @@ export function Dashboard({
   const [now, setNow] = useState(new Date());
   const [memorySavedTick, setMemorySavedTick] = useState(0);
   const [searching, setSearching] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [transcribing, setTranscribing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const greetedRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000);
