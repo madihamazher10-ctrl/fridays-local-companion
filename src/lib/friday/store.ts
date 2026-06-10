@@ -1,6 +1,7 @@
-// Local store backed by localStorage for FRIDAY's user, voiceprint, settings, and memories cache.
+// Local store backed by localStorage for Jessica's user, voiceprint, settings, and memories cache.
 import { useEffect, useState, useCallback } from "react";
 
+// Keep the legacy prefix so existing saved profiles, PINs, and chats are remembered.
 const PREFIX = "friday::";
 
 export type Endpoints = {
