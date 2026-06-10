@@ -31,6 +31,7 @@ function SettingsPage() {
     whisper: false,
     piper: false,
     pcControl: false,
+    backend: false,
   });
   const [models, setModels] = useState<string[]>([]);
   const [pin, setPin] = useState("");
