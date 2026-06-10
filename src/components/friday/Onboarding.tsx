@@ -5,7 +5,7 @@ import { sha256, type UserProfile } from "@/lib/friday/store";
 
 const PHRASES = [
   "My name is the key.",
-  "FRIDAY, you are loyal to me alone.",
+  "Jessica, you are loyal to me alone.",
   "Activate protocol Iron Heart.",
   "Initialize personal assistant systems.",
   "Authorize voice signature now.",
@@ -60,7 +60,7 @@ export function Onboarding({ onComplete }: { onComplete: (u: UserProfile) => voi
             <div className="text-xs tracking-[0.4em] text-[color:var(--color-cyan-glow)] mb-1">
               SYSTEM INITIALIZATION
             </div>
-            <h1 className="text-4xl font-display font-bold glow-text">FRIDAY</h1>
+            <h1 className="text-4xl font-display font-bold glow-text">JESSICA</h1>
             <p className="text-muted-foreground text-sm mt-1">Personal AI Assistant — v1.0</p>
           </div>
         </div>
@@ -194,7 +194,7 @@ export function Onboarding({ onComplete }: { onComplete: (u: UserProfile) => voi
             <div className="flex gap-2">
               <BackBtn onClick={() => setStep(2)} />
               <NextBtn onClick={finish} disabled={vecs.length < 5}>
-                Activate FRIDAY
+                Activate Jessica
               </NextBtn>
             </div>
           </div>

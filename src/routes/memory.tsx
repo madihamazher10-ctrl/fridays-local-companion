@@ -6,7 +6,7 @@ import { usePersistent, DEFAULT_SETTINGS, STORE_KEYS, type Settings } from "@/li
 import { chromaDelete, chromaQuery } from "@/lib/friday/services";
 
 export const Route = createFileRoute("/memory")({
-  head: () => ({ meta: [{ title: "FRIDAY · Memory Browser" }] }),
+  head: () => ({ meta: [{ title: "JESSICA · Memory Browser" }] }),
   component: () => (
     <ClientOnly fallback={<div className="p-8">Loading…</div>}>
       <MemoryPage />
@@ -81,7 +81,7 @@ function MemoryPage() {
             <div className="text-xs text-muted-foreground py-6 text-center">Loading…</div>
           ) : results.length === 0 ? (
             <div className="text-xs text-muted-foreground py-6 text-center">
-              No memories found. Have a conversation with FRIDAY to start building memory.
+              No memories found. Have a conversation with Jessica to start building memory.
             </div>
           ) : (
             <ul className="space-y-2 max-h-[60vh] overflow-y-auto pr-2">

@@ -1,4 +1,4 @@
-// Client wrappers around the local services that power FRIDAY.
+// Client wrappers around the local services that power Jessica.
 // All calls are made from the browser to localhost; no server functions needed.
 
 import type { Endpoints, Memory } from "./store";
@@ -187,7 +187,7 @@ export async function piperSpeak(endpoint: string, text: string, _voice = "defau
   }
 }
 
-/* ---------------- FRIDAY Backend (chat orchestrator) ---------------- */
+/* ---------------- Jessica Backend (chat orchestrator) ---------------- */
 
 // Streams from POST {backend}/chat/stream. Accepts either SSE ("data: {json}\n\n")
 // or newline-delimited JSON / raw text chunks. Returns the full assistant text.
