@@ -47,6 +47,7 @@ export function Dashboard({
     whisper: false,
     piper: false,
     pcControl: false,
+    backend: false,
   });
   const [online, setOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   const [now, setNow] = useState(new Date());
