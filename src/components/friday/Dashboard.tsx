@@ -345,15 +345,19 @@ export function Dashboard({
           <div className="flex flex-col items-center py-4">
             <Orb state={orbState} size={200} />
             <div className="mt-3 text-xs tracking-[0.4em] text-[color:var(--color-cyan-glow)]/80 uppercase">
-              {orbState === "listening"
-                ? "Listening…"
-                : orbState === "thinking"
-                  ? "Processing…"
-                  : orbState === "speaking"
-                    ? "Speaking…"
-                    : searching
-                      ? "🌐 Searching the web…"
-                      : "Ready"}
+              {recording
+                ? "● Recording…"
+                : transcribing
+                  ? "Transcribing…"
+                  : orbState === "listening"
+                    ? "Listening…"
+                    : orbState === "thinking"
+                      ? "Processing…"
+                      : orbState === "speaking"
+                        ? "Speaking…"
+                        : searching
+                          ? "🌐 Searching the web…"
+                          : "Ready"}
             </div>
             {memorySavedTick > 0 && (
               <div key={memorySavedTick} className="text-[10px] text-[color:var(--color-cyan-glow)]/60 mt-1 animate-fade-up">
