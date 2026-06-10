@@ -325,7 +325,7 @@ export function Dashboard({
               <StatusDot ok={status.whisper} label="Whisper voice" />
               <StatusDot ok={status.piper} label="Piper TTS" />
               <StatusDot ok={status.pcControl} label="PC control" />
-              <StatusDot ok={status.backend} label="FRIDAY backend" />
+              <StatusDot ok={status.backend} label="Jessica backend" />
             </ul>
           </Panel>
           <Link
@@ -405,7 +405,7 @@ function TopBar({ user, now }: { user: UserProfile; now: Date }) {
   return (
     <header className="glass border-b border-[color:var(--color-cyan-glow)]/20 px-6 py-3 flex items-center justify-between">
       <div className="flex items-center gap-4">
-        <div className="font-display text-2xl font-bold glow-text tracking-[0.3em]">FRIDAY</div>
+        <div className="font-display text-2xl font-bold glow-text tracking-[0.3em]">JESSICA</div>
         <div className="hidden md:block text-xs tracking-widest text-muted-foreground">
           IRON • HEART • PROTOCOL
         </div>
@@ -483,7 +483,7 @@ function MessageBubble({ m, userName, userPhoto }: { m: ChatMessage; userName: s
           )
         ) : (
           <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#b3f0ff] to-[#0066aa] shadow-[0_0_10px_#00d4ff] flex items-center justify-center text-[10px] font-display font-bold text-black">
-            F
+            J
           </div>
         )}
       </div>
@@ -556,7 +556,7 @@ function ChatInput({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Speak or type, sir…"
+        placeholder="Speak or type…"
         className="flex-1 bg-transparent outline-none text-sm py-2"
       />
       <button
