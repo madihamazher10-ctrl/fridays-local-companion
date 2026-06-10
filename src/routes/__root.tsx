@@ -77,10 +77,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "FRIDAY — Personal AI Assistant" },
+      { title: "JESSICA — Personal AI Assistant" },
       { name: "description", content: "Your private, local AI assistant. Offline-first. Loyal to one." },
       { name: "theme-color", content: "#0a0a0f" },
-      { property: "og:title", content: "FRIDAY — Personal AI Assistant" },
+      { property: "og:title", content: "JESSICA — Personal AI Assistant" },
       { property: "og:description", content: "Your private, local AI assistant. Offline-first. Loyal to one." },
     ],
     links: [
