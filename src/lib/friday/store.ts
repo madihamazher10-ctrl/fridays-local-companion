@@ -9,6 +9,7 @@ export type Endpoints = {
   whisper: string;
   piper: string;
   pcControl: string;
+  backend: string;
 };
 
 export type Settings = {
@@ -50,6 +51,7 @@ export const DEFAULT_SETTINGS: Settings = {
     whisper: "http://localhost:8080",
     piper: "http://localhost:5000",
     pcControl: "http://localhost:7000",
+    backend: "http://localhost:9000",
   },
   model: "llama3",
   autoSpeak: true,
