@@ -4,12 +4,18 @@ import { useState } from "react";
 import { Onboarding } from "@/components/friday/Onboarding";
 import { LockScreen } from "@/components/friday/LockScreen";
 import { Dashboard } from "@/components/friday/Dashboard";
-import { usePersistent, DEFAULT_SETTINGS, STORE_KEYS, type Settings, type UserProfile } from "@/lib/friday/store";
+import {
+  usePersistent,
+  DEFAULT_SETTINGS,
+  STORE_KEYS,
+  type Settings,
+  type UserProfile,
+} from "@/lib/friday/store";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "JESSICA — Personal AI Assistant" },
+      { title: "FRIDAY — Personal AI Assistant" },
       { name: "description", content: "Your private, local-first AI. Loyal to one user. Built to learn." },
     ],
   }),
@@ -28,7 +34,7 @@ function BootSplash() {
   return (
     <div className="min-h-screen flex items-center justify-center">
       <div className="font-display tracking-[0.5em] text-[color:var(--color-cyan-glow)] glow-text animate-pulse">
-        BOOTING JESSICA…
+        BOOTING…
       </div>
     </div>
   );
@@ -36,13 +42,23 @@ function BootSplash() {
 
 function AppShell() {
   const [user, setUser, userHydrated] = usePersistent<UserProfile | null>(STORE_KEYS.user, null);
-  const [settings, setSettings] = usePersistent<Settings>(STORE_KEYS.settings, DEFAULT_SETTINGS);
+  const [settings, setSettings, settingsHydrated] = usePersistent<Settings>(STORE_KEYS.settings, DEFAULT_SETTINGS);
   const [failed, setFailed] = usePersistent<number>(STORE_KEYS.failedAttempts, 0);
   const [lockUntil, setLockUntil] = usePersistent<number>(STORE_KEYS.lockUntil, 0);
   const [unlocked, setUnlocked] = useState(false);
 
-  if (!userHydrated) return <BootSplash />;
-  if (!user) return <Onboarding onComplete={(u) => setUser(u)} />;
+  if (!userHydrated || !settingsHydrated) return <BootSplash />;
+  if (!user) {
+    return (
+      <Onboarding
+        onComplete={({ user: u, assistantName, voiceName }) => {
+          setUser(u);
+          setSettings((s) => ({ ...s, assistantName, voiceName }));
+          setUnlocked(true);
+        }}
+      />
+    );
+  }
   if (!unlocked) {
     return (
       <LockScreen

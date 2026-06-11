@@ -7,20 +7,29 @@ import {
   DEFAULT_SETTINGS,
   STORE_KEYS,
   sha256,
+  wipeAll,
+  VOICE_OPTIONS,
   type Settings,
   type UserProfile,
 } from "@/lib/friday/store";
-import { checkAllServices, ollamaListModels } from "@/lib/friday/services";
-import { recordAudio, averageVectors } from "@/lib/friday/voiceprint";
+import {
+  checkAllServices,
+  ollamaListModels,
+  piperPreviewVoice,
+  memoryExport,
+} from "@/lib/friday/services";
+import { googleSignIn, googleFetchProfile } from "@/lib/friday/google";
 
 export const Route = createFileRoute("/settings")({
-  head: () => ({ meta: [{ title: "JESSICA · Settings" }] }),
+  head: () => ({ meta: [{ title: "FRIDAY · Settings" }] }),
   component: () => (
     <ClientOnly fallback={<div className="p-8">Loading…</div>}>
       <SettingsPage />
     </ClientOnly>
   ),
 });
+
+const DEFAULT_MODELS = ["llama3", "mistral", "gemma", "phi3"];
 
 function SettingsPage() {
   const [settings, setSettings] = usePersistent<Settings>(STORE_KEYS.settings, DEFAULT_SETTINGS);
@@ -32,12 +41,13 @@ function SettingsPage() {
     piper: false,
     pcControl: false,
     backend: false,
+    memory: false,
   });
   const [models, setModels] = useState<string[]>([]);
   const [pin, setPin] = useState("");
-  const [enrollVecs, setEnrollVecs] = useState<number[][]>([]);
-  const [recording, setRecording] = useState(false);
   const [info, setInfo] = useState("");
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
 
   useEffect(() => {
     checkAllServices(settings.endpoints).then(setStatus);
@@ -51,12 +61,6 @@ function SettingsPage() {
     setSettings((s) => ({ ...s, endpoints: { ...s.endpoints, [k]: v } }));
   }
 
-  async function startService(name: keyof typeof status) {
-    setInfo(
-      `Start ${name} locally — Lovable can't launch processes on your machine. See the README in your local repo for one-line start commands.`,
-    );
-  }
-
   async function changePin() {
     if (pin.length < 4 || !user) return;
     const pinHash = await sha256(pin);
@@ -65,50 +69,69 @@ function SettingsPage() {
     setInfo("PIN updated.");
   }
 
-  async function resetVoice() {
-    if (enrollVecs.length < 5 || !user) return;
-    const voiceprint = averageVectors(enrollVecs);
-    setUser({ ...user, voiceprint });
-    setEnrollVecs([]);
-    setInfo("Voiceprint updated.");
-  }
-
-  async function recordSample() {
-    setRecording(true);
+  async function connectGoogle() {
+    if (!settings.googleClientId) {
+      setInfo("Add a Google OAuth Client ID below first.");
+      return;
+    }
+    setConnecting(true);
     try {
-      const v = await recordAudio(3);
-      setEnrollVecs((vs) => [...vs, Array.from(v)]);
+      const { token, expiresAt } = await googleSignIn(settings.googleClientId);
+      const profile = await googleFetchProfile(token);
+      setSettings((s) => ({
+        ...s,
+        googleToken: token,
+        googleTokenExpiry: expiresAt,
+        googleProfile: { name: profile.name, email: profile.email, picture: profile.picture },
+      }));
+      setInfo(`Connected as ${profile.email}.`);
+    } catch (e) {
+      setInfo(`Google sign-in failed: ${(e as Error).message}`);
     } finally {
-      setRecording(false);
+      setConnecting(false);
     }
   }
 
-  function exportMemories() {
-    const dump: Record<string, unknown> = {};
-    if (typeof window !== "undefined") {
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (k?.startsWith("friday::")) dump[k] = localStorage.getItem(k);
-      }
+  function disconnectGoogle() {
+    setSettings((s) => ({ ...s, googleToken: "", googleTokenExpiry: 0, googleProfile: null }));
+    setInfo("Google disconnected.");
+  }
+
+  async function previewVoice(id: string) {
+    setPreviewing(id);
+    try {
+      const audio = await piperPreviewVoice(settings.endpoints.piper, id);
+      audio.addEventListener("ended", () => setPreviewing(null), { once: true });
+      audio.addEventListener("error", () => setPreviewing(null), { once: true });
+      await audio.play().catch(() => setPreviewing(null));
+    } catch {
+      setPreviewing(null);
     }
-    const blob = new Blob([JSON.stringify(dump, null, 2)], { type: "application/json" });
+  }
+
+  async function backupMemories() {
+    setInfo("Requesting memory export…");
+    const blob = await memoryExport(settings.endpoints.memory);
+    if (!blob) {
+      setInfo(`Couldn't reach memory service at ${settings.endpoints.memory}/memory/export.`);
+      return;
+    }
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `jessica-backup-${Date.now()}.json`;
+    a.download = `friday-memories-${Date.now()}.json`;
     a.click();
     URL.revokeObjectURL(url);
+    setInfo("Backup downloaded.");
   }
 
   function factoryReset() {
-    if (!confirm("Wipe all local Jessica data? This cannot be undone.")) return;
-    if (typeof window !== "undefined") {
-      Object.keys(localStorage)
-        .filter((k) => k.startsWith("friday::"))
-        .forEach((k) => localStorage.removeItem(k));
-      location.href = "/";
-    }
+    if (!confirm("Wipe all local FRIDAY data and restart onboarding?")) return;
+    wipeAll();
+    location.href = "/";
   }
+
+  const modelList = Array.from(new Set([...DEFAULT_MODELS, ...models]));
 
   return (
     <div className="min-h-screen p-6 scanlines">
@@ -127,6 +150,17 @@ function SettingsPage() {
           </div>
         )}
 
+        <Panel title="ASSISTANT">
+          <Field label="Assistant name (used everywhere)">
+            <input
+              value={settings.assistantName}
+              onChange={(e) => update("assistantName", e.target.value)}
+              className={inputCls}
+              placeholder="FRIDAY"
+            />
+          </Field>
+        </Panel>
+
         <Panel title="AI BRAIN">
           <div className="grid md:grid-cols-2 gap-3">
             <Field label="Ollama endpoint">
@@ -137,24 +171,20 @@ function SettingsPage() {
               />
             </Field>
             <Field label="Model">
-              {models.length ? (
-                <select value={settings.model} onChange={(e) => update("model", e.target.value)} className={inputCls}>
-                  {models.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input value={settings.model} onChange={(e) => update("model", e.target.value)} className={inputCls} />
-              )}
+              <select value={settings.model} onChange={(e) => update("model", e.target.value)} className={inputCls}>
+                {modelList.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
             </Field>
           </div>
         </Panel>
 
         <Panel title="LOCAL SERVICES">
           <ul className="space-y-2">
-            {(["ollama", "chroma", "whisper", "piper", "pcControl", "backend"] as const).map((k) => (
+            {(["backend", "ollama", "memory", "whisper", "piper", "pcControl"] as const).map((k) => (
               <li key={k} className="flex items-center gap-3">
                 <span
                   className={`w-2 h-2 rounded-full ${
@@ -167,21 +197,13 @@ function SettingsPage() {
                   onChange={(e) => updateEndpoint(k, e.target.value)}
                   className={inputCls + " flex-1"}
                 />
-                {!status[k] && (
-                  <button
-                    onClick={() => startService(k)}
-                    className="text-xs px-3 py-1.5 rounded-md border border-[color:var(--color-cyan-glow)]/40 hover:bg-[color:var(--color-cyan-glow)]/10"
-                  >
-                    Start
-                  </button>
-                )}
               </li>
             ))}
           </ul>
         </Panel>
 
-        <Panel title="INTEGRATIONS">
-          <Field label="Tavily API key (web search)">
+        <Panel title="WEB SEARCH (TAVILY)">
+          <Field label="Tavily API key">
             <input
               type="password"
               value={settings.tavilyKey}
@@ -190,38 +212,98 @@ function SettingsPage() {
               placeholder="tvly-…"
             />
           </Field>
-          <div className="grid grid-cols-2 gap-3 mt-3">
-            <Toggle label="Auto-speak responses" on={settings.autoSpeak} onChange={(v) => update("autoSpeak", v)} />
-            <Toggle label="Web search" on={settings.webSearch} onChange={(v) => update("webSearch", v)} />
+          <p className="text-[10px] text-muted-foreground mt-1">
+            Used server-side by the bridge for automatic web augmentation when online.
+          </p>
+        </Panel>
+
+        <Panel title="GOOGLE INTEGRATION">
+          <Field label="Google OAuth Client ID">
+            <input
+              value={settings.googleClientId}
+              onChange={(e) => update("googleClientId", e.target.value)}
+              className={inputCls}
+              placeholder="xxxxxxxx-xxxx.apps.googleusercontent.com"
+            />
+          </Field>
+          <div className="mt-3 flex items-center gap-3">
+            {settings.googleToken && settings.googleProfile ? (
+              <>
+                <div className="flex items-center gap-2 text-sm">
+                  {settings.googleProfile.picture && (
+                    <img
+                      src={settings.googleProfile.picture}
+                      alt=""
+                      className="w-8 h-8 rounded-full border border-[color:var(--color-cyan-glow)]/40"
+                    />
+                  )}
+                  <span>
+                    ✅ Connected as <strong>{settings.googleProfile.name}</strong>
+                    <span className="block text-[10px] text-muted-foreground">{settings.googleProfile.email}</span>
+                  </span>
+                </div>
+                <button
+                  onClick={disconnectGoogle}
+                  className="ml-auto px-3 py-1.5 text-xs rounded-md border border-destructive/60 text-destructive hover:bg-destructive/10"
+                >
+                  Disconnect
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={connectGoogle}
+                disabled={connecting}
+                className="flex items-center gap-2 px-4 py-2 rounded-md bg-white text-black text-sm font-medium hover:brightness-95 disabled:opacity-40"
+              >
+                <GoogleLogo />
+                {connecting ? "Connecting…" : "Connect Google"}
+              </button>
+            )}
           </div>
           <p className="text-[10px] text-muted-foreground mt-2">
-            Google Calendar & Gmail OAuth: set up in a follow-up; placeholders shown on the dashboard for now.
+            Requests Calendar & Gmail read-only scopes. Token stays in your browser only.
           </p>
         </Panel>
 
         <Panel title="VOICE">
-          <Field label="Voice name (Piper)">
-            <input value={settings.voiceName} onChange={(e) => update("voiceName", e.target.value)} className={inputCls} />
-          </Field>
-          <div className="mt-3">
-            <div className="text-xs text-muted-foreground mb-2">Re-enroll voiceprint (5 samples).</div>
-            <div className="flex items-center gap-3">
+          <div className="grid gap-2">
+            {VOICE_OPTIONS.map((v) => (
               <button
-                onClick={recordSample}
-                disabled={recording || enrollVecs.length >= 5}
-                className="px-4 py-2 rounded-md border border-[color:var(--color-cyan-glow)]/50 hover:bg-[color:var(--color-cyan-glow)]/10 disabled:opacity-40 text-sm"
+                key={v.id}
+                type="button"
+                onClick={() => update("voiceName", v.id)}
+                className={`flex items-center gap-3 text-left p-3 rounded-lg border transition ${
+                  settings.voiceName === v.id
+                    ? "border-[color:var(--color-cyan-glow)] bg-[color:var(--color-cyan-glow)]/10"
+                    : "border-border hover:border-[color:var(--color-cyan-glow)]/60"
+                }`}
               >
-                {recording ? "● recording…" : "● record sample"}
+                <span className="text-2xl">{v.flag}</span>
+                <span className="flex-1">
+                  <span className="font-display tracking-wide block">{v.label}</span>
+                  <span className="text-[11px] text-muted-foreground">{v.description}</span>
+                </span>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void previewVoice(v.id);
+                  }}
+                  className={`px-3 py-1 rounded-md border text-xs ${
+                    previewing === v.id
+                      ? "border-[color:var(--color-cyan-glow)] text-[color:var(--color-cyan-glow)] animate-pulse"
+                      : "border-border hover:border-[color:var(--color-cyan-glow)]/60"
+                  }`}
+                >
+                  {previewing === v.id ? "▶ playing" : "▶ Preview"}
+                </span>
               </button>
-              <span className="text-xs text-muted-foreground">{enrollVecs.length} / 5</span>
-              <button
-                onClick={resetVoice}
-                disabled={enrollVecs.length < 5}
-                className="ml-auto px-4 py-2 rounded-md bg-[color:var(--color-cyan-glow)] text-black text-xs font-display tracking-widest disabled:opacity-30"
-              >
-                SAVE VOICEPRINT
-              </button>
-            </div>
+            ))}
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <Toggle label="Auto-speak responses" on={settings.autoSpeak} onChange={(v) => update("autoSpeak", v)} />
+            <Toggle label="Web search" on={settings.webSearch} onChange={(v) => update("webSearch", v)} />
           </div>
         </Panel>
 
@@ -249,21 +331,18 @@ function SettingsPage() {
         <Panel title="DATA">
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={exportMemories}
+              onClick={backupMemories}
               className="px-4 py-2 rounded-md border border-border hover:border-[color:var(--color-cyan-glow)]/60 text-sm"
             >
-              Export backup (.json)
+              Backup Memories
             </button>
             <button
               onClick={factoryReset}
               className="px-4 py-2 rounded-md border border-destructive/60 text-destructive hover:bg-destructive/10 text-sm"
             >
-              Factory reset
+              Reset FRIDAY
             </button>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-2">
-            Storage usage: {typeof window !== "undefined" ? estimateLocalSize() : "—"}
-          </p>
         </Panel>
       </div>
     </div>
@@ -290,24 +369,20 @@ function Toggle({ label, on, onChange }: { label: string; on: boolean; onChange:
       className="flex items-center justify-between gap-3 glass border border-border rounded-md px-3 py-2 hover:border-[color:var(--color-cyan-glow)]/60 transition"
     >
       <span className="text-sm">{label}</span>
-      <span
-        className={`w-9 h-5 rounded-full relative transition ${on ? "bg-[color:var(--color-cyan-glow)]" : "bg-muted"}`}
-      >
-        <span
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-black transition ${
-            on ? "left-[18px]" : "left-0.5"
-          }`}
-        />
+      <span className={`w-9 h-5 rounded-full relative transition ${on ? "bg-[color:var(--color-cyan-glow)]" : "bg-muted"}`}>
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-black transition ${on ? "left-[18px]" : "left-0.5"}`} />
       </span>
     </button>
   );
 }
 
-function estimateLocalSize() {
-  let total = 0;
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k?.startsWith("friday::")) total += (localStorage.getItem(k)?.length ?? 0) + k.length;
-  }
-  return `${(total / 1024).toFixed(1)} KB local`;
+function GoogleLogo() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 48 48">
+      <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.9 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.2-.1-2.3-.4-3.5z" />
+      <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.6 16.1 19 13 24 13c3 0 5.8 1.1 7.9 3l5.7-5.7C34 6 29.3 4 24 4 16.3 4 9.7 8.4 6.3 14.7z" />
+      <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.5-5.2l-6.2-5.3C29.3 35 26.8 36 24 36c-5.3 0-9.7-3.1-11.3-8l-6.5 5C9.5 39.4 16.2 44 24 44z" />
+      <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.3-2.3 4.3-4.3 5.5l6.2 5.3C40.5 35.9 44 30.4 44 24c0-1.2-.1-2.3-.4-3.5z" />
+    </svg>
+  );
 }

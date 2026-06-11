@@ -1,7 +1,6 @@
-// Local store backed by localStorage for Jessica's user, voiceprint, settings, and memories cache.
+// Local store backed by localStorage for FRIDAY's user, settings, memories, and chat.
 import { useEffect, useState, useCallback } from "react";
 
-// Keep the legacy prefix so existing saved profiles, PINs, and chats are remembered.
 const PREFIX = "friday::";
 
 export type Endpoints = {
@@ -11,6 +10,13 @@ export type Endpoints = {
   piper: string;
   pcControl: string;
   backend: string;
+  memory: string;
+};
+
+export type GoogleProfile = {
+  name: string;
+  email: string;
+  picture?: string;
 };
 
 export type Settings = {
@@ -20,22 +26,30 @@ export type Settings = {
   webSearch: boolean;
   tavilyKey: string;
   voiceName: string;
+  assistantName: string;
+  googleClientId: string;
+  googleToken: string;
+  googleTokenExpiry: number;
+  googleProfile: GoogleProfile | null;
+  lastPlanDate: string;
 };
 
 export type UserProfile = {
   name: string;
-  photo?: string; // data URL
+  photo?: string;
   pinHash: string;
   voiceprint: number[] | null;
   createdAt: number;
 };
+
+export type Source = { title?: string; url: string };
 
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
   content: string;
   ts: number;
-  meta?: { searched?: boolean; offline?: boolean; memorySaved?: boolean };
+  meta?: { searched?: boolean; offline?: boolean; memorySaved?: boolean; sources?: Source[] };
 };
 
 export type Memory = {
@@ -45,6 +59,21 @@ export type Memory = {
   tags?: string[];
 };
 
+export type VoiceOption = {
+  id: string;
+  label: string;
+  flag: string;
+  description: string;
+};
+
+export const VOICE_OPTIONS: VoiceOption[] = [
+  { id: "en_GB-alan-medium", label: "Alan", flag: "🇬🇧", description: "British Male — JARVIS-like" },
+  { id: "en_US-ryan-medium", label: "Ryan", flag: "🇺🇸", description: "American Male" },
+  { id: "en_US-amy-medium", label: "Amy", flag: "🇺🇸", description: "American Female" },
+  { id: "en_US-lessac-medium", label: "Lessac", flag: "🇺🇸", description: "Clear American Female" },
+  { id: "en_IN-en-x-low", label: "Priya", flag: "🇮🇳", description: "Indian English" },
+];
+
 export const DEFAULT_SETTINGS: Settings = {
   endpoints: {
     ollama: "http://localhost:11434",
@@ -53,22 +82,48 @@ export const DEFAULT_SETTINGS: Settings = {
     piper: "http://localhost:5000",
     pcControl: "http://localhost:7000",
     backend: "http://localhost:9000",
+    memory: "http://localhost:8001",
   },
   model: "llama3",
   autoSpeak: true,
   webSearch: true,
   tavilyKey: "",
-  voiceName: "default",
+  voiceName: "en_GB-alan-medium",
+  assistantName: "FRIDAY",
+  googleClientId: "",
+  googleToken: "",
+  googleTokenExpiry: 0,
+  googleProfile: null,
+  lastPlanDate: "",
 };
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(PREFIX + key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as T;
+    // Deep-merge for objects so new default fields appear after upgrades
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed) && fallback && typeof fallback === "object") {
+      return mergeDefaults(fallback as object, parsed as object) as T;
+    }
+    return parsed;
   } catch {
     return fallback;
   }
+}
+
+function mergeDefaults<T extends object>(defaults: T, value: object): T {
+  const out: Record<string, unknown> = { ...(defaults as Record<string, unknown>) };
+  for (const [k, v] of Object.entries(value)) {
+    const dv = (defaults as Record<string, unknown>)[k];
+    if (v && typeof v === "object" && !Array.isArray(v) && dv && typeof dv === "object") {
+      out[k] = mergeDefaults(dv as object, v as object);
+    } else {
+      out[k] = v;
+    }
+  }
+  return out as T;
 }
 
 function write<T>(key: string, value: T) {
@@ -116,4 +171,12 @@ export const STORE_KEYS = {
   chat: "chat",
   failedAttempts: "failedAttempts",
   lockUntil: "lockUntil",
+  lastPlanDate: "lastPlanDate",
 };
+
+export function wipeAll() {
+  if (typeof window === "undefined") return;
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith(PREFIX))
+    .forEach((k) => localStorage.removeItem(k));
+}
